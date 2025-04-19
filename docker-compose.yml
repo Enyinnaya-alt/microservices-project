@@ -1,0 +1,143 @@
+version: '3.8'
+
+services:
+  # User Service
+  user-service:
+    build: ./user-service
+    ports:
+      - "5003:5000"
+    environment:
+      - FLASK_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=users_db
+      - DB_USER=postgres
+      - DB_PASSWORD=password
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - microservices-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Product Service
+  product-service:
+    build: ./product-service
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=development
+    depends_on:
+      - postgres
+    networks:
+      - microservices-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Frontend Service (React/Next.js)
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - user-service
+      - product-service
+    networks:
+      - microservices-net
+
+  # Redis Cache
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - microservices-net
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:13-alpine
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_MULTIPLE_DATABASES: users_db,products_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init-users.sh:/docker-entrypoint-initdb.d/10-init-users.sh
+      - ./product-service/init-products.sql:/docker-entrypoint-initdb.d/10-init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - microservices-net
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - user-service
+      - product-service
+    networks:
+      - microservices-net
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - microservices-net
+
+  # ELK Stack for Logging
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.14.0
+    environment:
+      - discovery.type=single-node
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - microservices-net
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.14.0
+    volumes:
+      - ./logging/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    depends_on:
+      - elasticsearch
+    networks:
+      - microservices-net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.14.0
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - microservices-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  grafana_data:
+  elasticsearch_data:
+
+networks:
+  microservices-net:
+    driver: bridge
