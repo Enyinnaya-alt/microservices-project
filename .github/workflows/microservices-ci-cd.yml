@@ -52,7 +52,7 @@ jobs:
           docker-compose build
           docker-compose push
       
-      - name: Deploy to staging
-        if: github.ref == 'refs/heads/main'
-        run: |
-          ssh user@staging-server "cd /path/to/project && docker-compose pull && docker-compose up -d"
+      #- name: Deploy to staging
+       # if: github.ref == 'refs/heads/main'
+        #run: |
+         # ssh user@staging-server "cd /path/to/project && docker-compose pull && docker-compose up -d"
